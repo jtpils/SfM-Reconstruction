@@ -72,76 +72,82 @@ def get_images_paths(folder_path):
 				images_path.append(os.path.join(r, file))
 	return images_path
 
+# returns two values: result to plot matches, list with coordinates of matches
 def match(view1, view2, matcher_alg='brute_force', distance_type=''):
 
-		# Brute Force Matching
+	# Brute Force Matching
 
-		# Params: First one is normType. It specifies the distance measurement to be used. By default, it is cv.NORM_L2. It is good for SIFT, SURF etc 
-		# (cv.NORM_L1 is also there). For binary string based descriptors like ORB, BRIEF, BRISK etc, cv.NORM_HAMMING should be used, which used
-		# Hamming distance as measurement. If ORB is using WTA_K == 3 or 4, cv.NORM_HAMMING2 should be used.
-		# Second param is boolean variable, crossCheck which is false by default. If it is true, Matcher returns only those matches with value (i,j) 
-		# such that i-th descriptor in set A has j-th descriptor in set B as the best match and vice-versa. That is, the two features in both sets 
-		# should match each other.
+	# Params: First one is normType. It specifies the distance measurement to be used. By default, it is cv.NORM_L2. It is good for SIFT, SURF etc 
+	# (cv.NORM_L1 is also there). For binary string based descriptors like ORB, BRIEF, BRISK etc, cv.NORM_HAMMING should be used, which used
+	# Hamming distance as measurement. If ORB is using WTA_K == 3 or 4, cv.NORM_HAMMING2 should be used.
+	# Second param is boolean variable, crossCheck which is false by default. If it is true, Matcher returns only those matches with value (i,j) 
+	# such that i-th descriptor in set A has j-th descriptor in set B as the best match and vice-versa. That is, the two features in both sets 
+	# should match each other.
 
-		crossCheck = False if distance_type == 'ratio' else True
+	matched_points = []
+	closest_matches = []
+	crossCheck = False if distance_type == 'ratio' else True
 
-		if feature_detection == 'sift' or feature_detection == 'surf':
+	if feature_detection == 'sift' or feature_detection == 'surf':
 
-			if matcher_alg == 'brute_force':
-				matcher = cv2.BFMatcher(cv2.NORM_L2, crossCheck=crossCheck)
+		if matcher_alg == 'brute_force':
+			matcher = cv2.BFMatcher(cv2.NORM_L2, crossCheck=crossCheck)
 
-			elif matcher_alg == 'flann': 
-				FLANN_INDEX_KDTREE = 1
-				index_params = dict(algorithm = FLANN_INDEX_KDTREE, trees = 5)
-				search_params = dict(checks=50)   # or pass empty dictionary
+		elif matcher_alg == 'flann': 
+			FLANN_INDEX_KDTREE = 1
+			index_params = dict(algorithm = FLANN_INDEX_KDTREE, trees = 5)
+			search_params = dict(checks=50)   # or pass empty dictionary
 
-				matcher = cv2.FlannBasedMatcher(index_params,search_params)
-			
-		elif feature_detection == 'orb':
+			matcher = cv2.FlannBasedMatcher(index_params,search_params)
+		
+	elif feature_detection == 'orb':
 
-			if matcher_alg == 'brute_force':
-				matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=crossCheck) 
+		if matcher_alg == 'brute_force':
+			matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=crossCheck) 
 
-			elif matcher_alg == 'flann': 
-				FLANN_INDEX_LSH = 6
-				index_params= dict(algorithm = FLANN_INDEX_LSH, table_number = 6, key_size = 12, multi_probe_level = 1)
-				search_params = dict(checks=50)   # or pass empty dictionary
+		elif matcher_alg == 'flann': 
+			FLANN_INDEX_LSH = 6
+			index_params= dict(algorithm = FLANN_INDEX_LSH, table_number = 6, key_size = 12, multi_probe_level = 1)
+			search_params = dict(checks=50)   # or pass empty dictionary
 
-				matcher = cv2.FlannBasedMatcher(index_params,search_params)
+			matcher = cv2.FlannBasedMatcher(index_params,search_params)
 
-		if distance_type == 'ratio':
+	if distance_type == 'ratio':
 
-			#pdb.set_trace()
-			matches = matcher.knnMatch(view1.descriptors, view2.descriptors, k=2)
+		matches = matcher.knnMatch(view1.descriptors, view2.descriptors, k=2)
 
-			#pdb.set_trace()
+		# Need to draw only good matches, so create a mask
+		matches_mask = [[0,0] for i in range(len(matches))]
 
-			# Need to draw only good matches, so create a mask
-			matches_mask = [[0,0] for i in range(len(matches))]
+		# ratio test
+		#for i,(m,n) in enumerate(matches):
+		for m,n in matches:
+			if m.distance < 0.7*n.distance:
+				#matches_mask[i]=[1,0]
+				closest_matches.append([m])
+				matched_points.append([view1.keypoints[m.queryIdx].pt, view2.keypoints[m.trainIdx].pt])
 
-			ma = []
-			# ratio test as per Lowe's paper
-			#for i,(m,n) in enumerate(matches):
-			for m,n in matches:
-				if m.distance < 0.7*n.distance:
-					#matches_mask[i]=[1,0]
-					ma.append([m])
+		draw_params = dict(matchColor = (0,255,0), singlePointColor = (255,0,0), matchesMask = matches_mask, flags = 0)
+		#result = cv2.drawMatchesKnn(view1.image, view1.keypoints, view2.image, view2.keypoints, matches, None, **draw_params)
+		result = cv2.drawMatchesKnn(view1.image, view1.keypoints, view2.image, view2.keypoints, closest_matches, None, flags = 2)
 
-			draw_params = dict(matchColor = (0,255,0), singlePointColor = (255,0,0), matchesMask = matches_mask, flags = 0)
-			#result = cv2.drawMatchesKnn(view1.image, view1.keypoints, view2.image, view2.keypoints, matches, None, **draw_params)
-			result = cv2.drawMatchesKnn(view1.image, view1.keypoints, view2.image, view2.keypoints, ma, None, flags = 2)
+	else:
 
-			pdb.set_trace()
+		matches = matcher.match(view1.descriptors, view2.descriptors) # match() returns the best match
+		matches = sorted(matches, key = lambda x: x.distance)
+		matches = matches[:50]
 
-		else:
+		for m in matches:
+			if m.distance < 170: #0.5*matches[-1].distance: 
+				closest_matches.append(m)
+				matched_points.append([view1.keypoints[m.queryIdx].pt, view2.keypoints[m.trainIdx].pt])
 
-			matches = matcher.match(view1.descriptors, view2.descriptors) # match() returns the best match
-			matches = sorted(matches, key = lambda x: x.distance)
-			matches = matches[:50]
+		result = cv2.drawMatches(view1.image, view1.keypoints, view2.image, view2.keypoints, closest_matches, None, flags=2) # flags=2 hydes the features that are not matched
 
-			result = cv2.drawMatches(view1.image, view1.keypoints, view2.image, view2.keypoints, matches, None, flags=2) # flags=2 hydes the features that are not matched
+	matched_points = np.array(matched_points)
+	view2.matched_pixels = matched_points[:,1]
 
-		return result, matches
+	return result, matched_points
 
 # construct the argument parse and parse the arguments
 ap = argparse.ArgumentParser()
