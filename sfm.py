@@ -83,7 +83,7 @@ class SFM:
         view1.indices[indices1] = point_indices
         view2.indices[indices2] = point_indices
 
-        return matched_pixels1, matched_pixels2
+        self.triangulate_points(view1, view2, matched_pixels1, matched_pixels2)
 
     def triangulate_points(self, view1, view2, matched_pixels1, matched_pixels2):
 
@@ -183,9 +183,7 @@ class SFM:
         view0 = self.views[0]
         view1 = self.views[1]
 
-        img_pts1, img_pts2 = self.baseline_pose(view1=view0, view2=view1)
-
-        self.triangulate_points(view0, view1, img_pts1, img_pts2)
+        self.baseline_pose(view1=view0, view2=view1)
 
         self.save_ply('./results/0_1.ply')
 
@@ -195,6 +193,9 @@ class SFM:
         for i in range(2, len(self.views)):
 
             self.integrate_new_view(self.views[i])
+            ply_filename = './results/' + str(i-1) + '_' + str(i) + '.ply'
+            self.save_ply(ply_filename)
+            self.done.append(self.views[i])
 
 
 
