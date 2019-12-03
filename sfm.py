@@ -26,7 +26,8 @@ class SFM:
         self.num_points_3D = 0
         self.done = []
 
-    def baseline_pose(self, view1, view2):
+    @staticmethod
+    def retrieve_points(view1, view2):
 
         indices1 = []
         indices2 = []
@@ -44,6 +45,11 @@ class SFM:
         matched_pixels1 = np.array(indices1)
         matched_pixels2 = np.array(indices2)
 
+        return indices1, indices2, matched_pixels1, matched_pixels2
+
+    def baseline_pose(self, view1, view2):
+
+        indices1, indices2, matched_pixels1, matched_pixels2 = self.retrieve_points(view1, view2)
         F, mask = cv2.findFundamentalMat(matched_pixels1, matched_pixels2, method=cv2.FM_RANSAC,
                                          ransacReprojThreshold=0.9, confidence=0.9)
         mask = mask.astype(bool).flatten()
@@ -110,7 +116,7 @@ class SFM:
         R, _ = cv2.Rodrigues(R)
         view1.rotation_matrix = R
         view1.translation_vector = t
-    
+
     def save_ply(self, filename):
 
         colors = np.zeros(self.points_3D.shape, dtype=np.int32)
