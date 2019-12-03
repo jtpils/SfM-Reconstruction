@@ -47,19 +47,29 @@ class SFM:
 
         return indices1, indices2, matched_pixels1, matched_pixels2
 
-    def baseline_pose(self, view1, view2):
+    @staticmethod
+    def filter_matches(indices1, indices2, matched_pixels1, matched_pixels2):
 
-        indices1, indices2, matched_pixels1, matched_pixels2 = self.retrieve_points(view1, view2)
         F, mask = cv2.findFundamentalMat(matched_pixels1, matched_pixels2, method=cv2.FM_RANSAC,
                                          ransacReprojThreshold=0.9, confidence=0.9)
         mask = mask.astype(bool).flatten()
-
-        E = K.transpose().dot(F).dot(K)
 
         matched_pixels1 = matched_pixels1[mask]
         indices1 = indices1[mask]
         matched_pixels2 = matched_pixels2[mask]
         indices2 = indices2[mask]
+
+        return F, mask, indices1, indices2, matched_pixels1, matched_pixels2
+
+    def baseline_pose(self, view1, view2):
+
+        indices1, indices2, matched_pixels1, matched_pixels2 = self.retrieve_points(view1, view2)
+        F, mask, indices1, indices2, matched_pixels1, matched_pixels2 = self.filter_matches(indices1,
+                                                                                            indices2,
+                                                                                            matched_pixels1,
+                                                                                            matched_pixels2)
+
+        E = K.transpose().dot(F).dot(K)
 
         _, R, t, _ = cv2.recoverPose(E, matched_pixels1, matched_pixels2, K)
 
@@ -91,7 +101,7 @@ class SFM:
         self.points_3D = np.concatenate((self.points_3D, triangulated_points))
         self.num_points_3D += self.points_3D.shape[0]
 
-    def integrate_new_view(self, view1, view2):
+    def integrate_new_view(self, view1):
 
         all_descriptors = [view.descriptors for view in self.done]
         matches = match_again(view1.descriptors, all_descriptors)
@@ -170,7 +180,7 @@ class SFM:
 
         for i in range(2, len(self.views)):
 
-            self.integrate_new_view(self.views[i], self.views[i - 1])
+            self.integrate_new_view(self.views[i])
 
 
 
