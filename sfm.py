@@ -101,10 +101,10 @@ class SFM:
         self.points_3D = np.concatenate((self.points_3D, triangulated_points))
         self.num_points_3D += self.points_3D.shape[0]
 
-    def integrate_new_view(self, view1):
+    def integrate_new_view(self, new_view):
 
         all_descriptors = [view.descriptors for view in self.done]
-        matches = match_again(view1.descriptors, all_descriptors)
+        matches = match_again(new_view.descriptors, all_descriptors)
 
         new_points_3D = np.zeros((0, 3))
         new_points_2D = np.zeros((0, 2))
@@ -116,7 +116,7 @@ class SFM:
             if self.done[matched_img_idx].indices[matched_kp_old_idx] > 0:
 
                 new_point_3D_idx = self.done[matched_img_idx].indices[matched_kp_old_idx]
-                new_point_2D_pixel = view1.keypoints[matched_kp_new_idx].pt
+                new_point_2D_pixel = new_view.keypoints[matched_kp_new_idx].pt
 
                 new_points_3D = np.concatenate((new_points_3D, self.points_3D[new_point_3D_idx, :]))
                 new_points_2D = np.concatenate((new_points_2D, new_point_2D_pixel))
@@ -124,8 +124,22 @@ class SFM:
         _, R, t, _ = cv2.solvePnPRansac(new_points_3D, new_points_2D, K, distCoeffs=None, reprojectionError=8.,
                                         confidence=0.99, flags=cv2.SOLVEPNP_DLS)
         R, _ = cv2.Rodrigues(R)
-        view1.rotation_matrix = R
-        view1.translation_vector = t
+        new_view.rotation_matrix = R
+        new_view.translation_vector = t
+
+        prev_view = self.done[-1]
+
+        indices1, indices2, matched_pixels1, matched_pixels2 = self.retrieve_points(prev_view, new_view)
+        F, mask, indices1, indices2, matched_pixels1, matched_pixels2 = self.filter_matches(indices1,
+                                                                                            indices2,
+                                                                                            matched_pixels1,
+                                                                                            matched_pixels2)
+
+        point_indices = np.arange(self.num_points_3D, len(indices1))
+        prev_view.indices[indices1] = point_indices
+        new_view.indices[indices2] = point_indices
+
+        self.triangulate_points(prev_view, new_view, matched_pixels1, matched_pixels2)
 
     def save_ply(self, filename):
 
@@ -137,8 +151,8 @@ class SFM:
             img_pts = [kp.pt for kp in kps]
             img = cv2.imread('images/' + view.name)
 
-            colors[view.indices[view.indices > 0].astype(int)] = img[np.int32(img_pts[:,1]),
-                                                                     np.int32(img_pts[:,0])]
+            colors[view.indices[view.indices > 0].astype(int)] = img[np.int32(img_pts[:, 1]),
+                                                                     np.int32(img_pts[:, 0])]
 
         with open(filename, 'w') as f:
             f.write('ply\n')
