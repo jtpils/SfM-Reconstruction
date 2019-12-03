@@ -4,7 +4,13 @@ import cv2
 import pdb
 import os
 import sys
+import pickle
 
+#pySDL
+#pixelShuffle() in Pytorch to upsample pixales to generate a better quality image.
+
+#Relevance
+#Future work
 
 class View():
 
@@ -46,37 +52,84 @@ class View():
 
 		return resized
 
-	def extract_features(self):
+	def write_features_file(self):
 
-		if self.method == 'sift':
-			detector = cv2.xfeatures2d.SIFT_create()
-		elif self.method == 'surf':
-			detector = cv2.xfeatures2d.SURF_create()
-		elif self.method == 'orb':
-			detector = cv2.ORB_create(nfeatures=1500) # Without nfeatures value it detects fewer than SIFT and SUFT
-		else:
-			print('Admitted values for the feature detector are: sift, surf or orb ')
-			sys.exit(0)
+		#i = 0
+		temp_array = []
+		for idx, point in enumerate(self.keypoints):
+			temp = (point.pt, point.size, point.angle, point.response, point.octave, point.class_id, self.descriptors[idx])
+			#++i
+			temp_array.append(temp)
+		
+		features_file = open('features/'+ self.file_name + '.pkl', 'wb')
+		pickle.dump(temp_array, features_file) 
+		features_file.close()
+
+		# open a file, where you ant to store the data
+		#kp_file = open('keypoints/'+ self.file_name + '.pkl', 'wb')
+		#desc_file = open('descriptors/'+ self.file_name + '.pkl', 'wb')
+
+		# dump information to that file
+		#pickle.dump(self.keypoints, kp_file)
+		#pickle.dump(self.descriptors, desc_file)
+
+		# close the file
+		#kp_file.close()
+		#desc_file.close()
+
+	def read_features_file(self):
+
+		features = pickle.load( open('features/'+ self.file_name + '.pkl', "rb" ) )
+
+		keypoints = []
+		descriptors = []
+
+		for point in features:
+			temp_feature = cv2.KeyPoint(x=point[0][0],y=point[0][1],_size=point[1], _angle=point[2], _response=point[3], _octave=point[4], _class_id=point[5])
+			temp_descriptor = point[6]
+			keypoints.append(temp_feature)
+			descriptors.append(temp_descriptor)
+		return keypoints, np.array(descriptors)
+
+	def extract_features(self, features_path):
 
 		# Resizing step
-		# pdb.set_trace()
 		#self.image_1 = self.scale_image_percentage(self.image_1)
 		#image_1_height = self.image_1.shape[0]
 		standard_height = 1024
 		self.image = self.scale_image_height(self.image, standard_height)
 
-		self.keypoints, self.descriptors = detector.detectAndCompute(self.image, None)
-		#keypoints_2, img_descriptors_2 = detector.detectAndCompute(self.image_2, None)
+		if features_path != None:
+			self.keypoints, self.descriptors = self.read_features_file()
 
-def get_images_paths(folder_path):
-	images_path = []
+		else:
+
+			if self.method == 'sift':
+				detector = cv2.xfeatures2d.SIFT_create()
+			elif self.method == 'surf':
+				detector = cv2.xfeatures2d.SURF_create()
+			elif self.method == 'orb':
+				detector = cv2.ORB_create(nfeatures=1500) # Without nfeatures value it detects fewer than SIFT and SUFT
+			else:
+				print('Admitted values for the feature detector are: sift, surf or orb ')
+				sys.exit(0)
+
+			self.keypoints, self.descriptors = detector.detectAndCompute(self.image, None)
+			#keypoints_2, img_descriptors_2 = detector.detectAndCompute(self.image_2, None)
+
+			self.write_features_file()
+
+
+def get_files_paths(folder_path):
+	files_paths = []
 
 	# r=root, d=directories, f = files
 	for r, d, f in os.walk(folder_path):
 		for file in f:
-			if '.jpg' in file:
-				images_path.append(os.path.join(r, file))
-	return images_path
+			if '.jpg' in file or '.pkl':
+				files_paths.append(os.path.join(r, file))
+
+	return files_paths
 
 # returns two values: result to plot matches, list with coordinates of matches
 def match(view1, view2, matcher_alg='brute_force', distance_type=''):
@@ -119,8 +172,6 @@ def match(view1, view2, matcher_alg='brute_force', distance_type=''):
 			matcher = cv2.FlannBasedMatcher(index_params,search_params)
 
 	if distance_type == 'ratio':
-
-		good = []
 
 		matches = matcher.knnMatch(view1.descriptors, view2.descriptors, k=2)
 
@@ -165,44 +216,44 @@ def match(view1, view2, matcher_alg='brute_force', distance_type=''):
 
 	return result, matched_points
 
-def crete_views(images_path):
+def crete_views(images_path, features_paths):
 
 	views = []
 
-	for image_path in images_path:
+	for i in range(len(images_path)):
 
-		view = View(image_path, 'sift')
+		view = View(images_path[i], 'sift')
+		feat_path = None if features_paths == None else features_paths[i]
+		view.extract_features(feat_path)
 		views.append(view)
 
 	return views
 
 # construct the argument parse and parse the arguments
 ap = argparse.ArgumentParser()
-ap.add_argument("-p", "--images_path", required=False, help="path to input dataset of training images")
+ap.add_argument("-i", "--images_path", required=True, help="path to input dataset of training images")
+ap.add_argument("-f", "--features_path", required=False, help="path to computed features")
 #ap.add_argument("-i", "--image", required=True, help="path to input dataset of training images")
 #ap.add_argument("-j", "--image_2", required=True, help="path to input dataset of training images")
 ap.add_argument("-d", "--feature_detection", default='sift', help="feature detection method. Admitted values: sift, surf, orb. Defect value: sift")
 
 args = vars(ap.parse_args())
 
-folder_path = args["images_path"]
+images_path = args["images_path"]
+features_path = args["features_path"]
 #image_path = args["image"]
 #image_path_2 = args["image_2"]
 feature_detection = args["feature_detection"]
 
 distance_type = 'ratio'
 
-images_path = get_images_paths(folder_path)
+images_paths = get_files_paths(images_path)
+features_paths = get_files_paths(features_path) if features_path != None  else None
 
-views = crete_views(images_path)
+views = crete_views(images_paths, features_paths)
 
-pdb.set_trace()
-
-view1 = View(image_path, 'sift')
-view2 = View(image_path_2, 'sift')
-
-view1.extract_features()
-view2.extract_features()
+view1 = views[0]
+view2 = views[1]
 
 display_result, matches = match(view1, view2, 'brute_force', distance_type)
 
