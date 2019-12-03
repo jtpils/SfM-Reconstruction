@@ -4,6 +4,18 @@ import numpy as np
 K = np.load('OP5_camera_matrix.npy')
 
 
+# dummy function
+def match_again(desc, all_desc):
+
+    matcher_object = getattr(cv2, "BFMatcher")
+
+    matcher_object.add(all_desc)
+    matcher_object.train()
+
+    matches = matcher_object.match(queryDescriptor=desc)
+    return matches
+
+
 class SFM:
 
     def __init__(self, views):
@@ -45,11 +57,11 @@ class SFM:
 
         _, R, t, _ = cv2.recoverPose(E, matched_pixels1, matched_pixels2, K)
 
-        view1.rotation = np.eye(3, 3)
-        view1.translation = np.zeros(3, 1)
+        view1.rotation_matrix = np.eye(3, 3)
+        view1.translation_vector = np.zeros(3, 1)
 
-        view2.rotation = R
-        view2.translation = t
+        view2.rotation_matrix = R
+        view2.translation_vector = t
 
         point_indices = np.arange(self.num_points_3D, len(indices1))
         view1.indices[indices1] = point_indices
@@ -65,14 +77,40 @@ class SFM:
         points1_normalized = np.linalg.inv(K).dot(points1_homogenous.transpose()).transpose()
         points2_normalized = np.linalg.inv(K).dot(points2_homogenous.transpose()).transpose()
 
-        triangulated_points_homogenous = cv2.triangulatePoints(np.hstack((view1.rotation, view1.translation)),
-                                                               np.hstack((view2.rotation, view2.translation)),
+        triangulated_points_homogenous = cv2.triangulatePoints(np.hstack((view1.rotation_matrix, view1.translation_vector)),
+                                                               np.hstack((view2.rotation_matrix, view2.translation_vector)),
                                                                points1_normalized.transpose(), points2_normalized.transpose())
         triangulated_points = cv2.convertPointsFromHomogeneous(triangulated_points_homogenous.transpose)[:, 0, :]
 
         self.points_3D = np.concatenate((self.points_3D, triangulated_points))
         self.num_points_3D += self.points_3D.shape[0]
 
+    def integrate_new_view(self, view1, view2):
+
+        all_descriptors = [view.descriptors for view in self.done]
+        matches = match_again(view1.descriptors, all_descriptors)
+
+        new_points_3D = np.zeros((0, 3))
+        new_points_2D = np.zeros((0, 2))
+
+        for m in matches:
+
+            matched_img_idx, matched_kp_old_idx, matched_kp_new_idx = m.imgIdx, m.queryIdx, m.trainIdx
+
+            if self.done[matched_img_idx].indices[matched_kp_old_idx] > 0:
+
+                new_point_3D_idx = self.done[matched_img_idx].indices[matched_kp_old_idx]
+                new_point_2D_pixel = view1.keypoints[matched_kp_new_idx].pt
+
+                new_points_3D = np.concatenate((new_points_3D, self.points_3D[new_point_3D_idx, :]))
+                new_points_2D = np.concatenate((new_points_2D, new_point_2D_pixel))
+
+        _, R, t, _ = cv2.solvePnPRansac(new_points_3D, new_points_2D, K, distCoeffs=None, reprojectionError=8.,
+                                        confidence=0.99, flags=cv2.SOLVEPNP_DLS)
+        R, _ = cv2.Rodrigues(R)
+        view1.rotation_matrix = R
+        view1.translation_vector = t
+    
     def save_ply(self, filename):
 
         colors = np.zeros(self.points_3D.shape, dtype=np.int32)
@@ -119,12 +157,14 @@ class SFM:
 
         self.triangulate_points(view0, view1, img_pts1, img_pts2)
 
-        self.save_ply('./results/)_1.ply')
+        self.save_ply('./results/0_1.ply')
 
         self.done.append(view0)
         self.done.append(view1)
 
+        for i in range(2, len(self.views)):
 
+            self.integrate_new_view(self.views[i], self.views[i - 1])
 
 
 
