@@ -11,12 +11,18 @@ class View():
 	def __init__(self, image_path, feat_det_type= 'sift'):
 		super(View, self).__init__()
 
+		count_parent_dir = len(os.path.dirname(image_path)) + 1
+		self.file_name = image_path[count_parent_dir:-4]
 		self.image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
 		self.keypoints = []
 		self.descriptors = []
 		self.method = feat_det_type
 		self.projection_matrix = np.zeros((3, 4), dtype=np.float32)
-		self.matched_pixels = []
+		self.rotation_matrix = np.zeros((3, 3), dtype=np.float32)
+		self.translation_matrix = np.zeros((3, 1), dtype=np.float32)
+		self.matched_points = []
+		self.matches = []
+		self.indices = []
 
 	def scale_image_percentage(self, img):
 
@@ -66,7 +72,7 @@ def get_images_paths(folder_path):
 	images_path = []
 
 	# r=root, d=directories, f = files
-	for r, d, f in os.walk(training_path):
+	for r, d, f in os.walk(folder_path):
 		for file in f:
 			if '.jpg' in file:
 				images_path.append(os.path.join(r, file))
@@ -114,22 +120,24 @@ def match(view1, view2, matcher_alg='brute_force', distance_type=''):
 
 	if distance_type == 'ratio':
 
+		good = []
+
 		matches = matcher.knnMatch(view1.descriptors, view2.descriptors, k=2)
 
 		# Need to draw only good matches, so create a mask
-		matches_mask = [[0,0] for i in range(len(matches))]
+		#matches_mask = [[0,0] for i in range(len(matches))]
 
 		# ratio test
 		#for i,(m,n) in enumerate(matches):
 		for m,n in matches:
 			if m.distance < 0.7*n.distance:
 				#matches_mask[i]=[1,0]
-				closest_matches.append([m])
+				#closest_matches.append([m])
+				closest_matches.append(m)
 				matched_points.append([view1.keypoints[m.queryIdx].pt, view2.keypoints[m.trainIdx].pt])
 
-		draw_params = dict(matchColor = (0,255,0), singlePointColor = (255,0,0), matchesMask = matches_mask, flags = 0)
-		#result = cv2.drawMatchesKnn(view1.image, view1.keypoints, view2.image, view2.keypoints, matches, None, **draw_params)
-		result = cv2.drawMatchesKnn(view1.image, view1.keypoints, view2.image, view2.keypoints, closest_matches, None, flags = 2)
+		#result = cv2.drawMatchesKnn(view1.image, view1.keypoints, view2.image, view2.keypoints, closest_matches, None, **draw_params)
+		#result = cv2.drawMatchesKnn(view1.image, view1.keypoints, view2.image, view2.keypoints, closest_matches, None, flags = 2)
 
 	else:
 
@@ -142,31 +150,53 @@ def match(view1, view2, matcher_alg='brute_force', distance_type=''):
 				closest_matches.append(m)
 				matched_points.append([view1.keypoints[m.queryIdx].pt, view2.keypoints[m.trainIdx].pt])
 
-		result = cv2.drawMatches(view1.image, view1.keypoints, view2.image, view2.keypoints, closest_matches, None, flags=2) # flags=2 hydes the features that are not matched
+		#result = cv2.drawMatches(view1.image, view1.keypoints, view2.image, view2.keypoints, closest_matches, None, flags=2) # flags=2 hydes the features that are not matched
+
+	src_pts = np.float32([ view1.keypoints[m.queryIdx].pt for m in closest_matches ])
+	dst_pts = np.float32([ view2.keypoints[m.trainIdx].pt for m in closest_matches ])
+	M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC,5.0)
+	matches_mask = mask.ravel().tolist()
+
+	draw_params = dict(matchColor = (0,255,0), singlePointColor = (255,0,0), matchesMask = matches_mask, flags = 2)
+	result = cv2.drawMatches(view1.image, view1.keypoints, view2.image, view2.keypoints, closest_matches, None, **draw_params)
 
 	matched_points = np.array(matched_points)
-	view2.matched_pixels = matched_points[:,1]
+	view2.matched_points = matched_points[:,1]
 
 	return result, matched_points
+
+def crete_views(images_path):
+
+	views = []
+
+	for image_path in images_path:
+
+		view = View(image_path, 'sift')
+		views.append(view)
+
+	return views
 
 # construct the argument parse and parse the arguments
 ap = argparse.ArgumentParser()
 ap.add_argument("-p", "--images_path", required=False, help="path to input dataset of training images")
-ap.add_argument("-i", "--image", required=True, help="path to input dataset of training images")
-ap.add_argument("-j", "--image_2", required=True, help="path to input dataset of training images")
+#ap.add_argument("-i", "--image", required=True, help="path to input dataset of training images")
+#ap.add_argument("-j", "--image_2", required=True, help="path to input dataset of training images")
 ap.add_argument("-d", "--feature_detection", default='sift', help="feature detection method. Admitted values: sift, surf, orb. Defect value: sift")
 
 args = vars(ap.parse_args())
 
 folder_path = args["images_path"]
-image_path = args["image"]
-image_path_2 = args["image_2"]
+#image_path = args["image"]
+#image_path_2 = args["image_2"]
 feature_detection = args["feature_detection"]
 
 distance_type = 'ratio'
 
-#images_path = get_images_paths(folder_path)
+images_path = get_images_paths(folder_path)
 
+views = crete_views(images_path)
+
+pdb.set_trace()
 
 view1 = View(image_path, 'sift')
 view2 = View(image_path_2, 'sift')
