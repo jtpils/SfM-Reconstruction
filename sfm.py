@@ -36,11 +36,19 @@ class SFM:
 
         return indices1, indices2, matched_pixels1, matched_pixels2
 
-    @staticmethod
-    def filter_matches(indices1, indices2, matched_pixels1, matched_pixels2):
+    def filter_matches(self, indices1, indices2, matched_pixels1, matched_pixels2):
 
-        F, mask = cv2.findFundamentalMat(matched_pixels1, matched_pixels2, method=cv2.FM_RANSAC,
-                                         ransacReprojThreshold=0.9, confidence=0.9)
+        points1_homogenous = cv2.convertPointsToHomogeneous(matched_pixels1)[:, 0, :]
+        points2_homogenous = cv2.convertPointsToHomogeneous(matched_pixels2)[:, 0, :]
+
+        points1_normalized = np.linalg.inv(self.K).dot(points1_homogenous.transpose()).transpose()
+        points2_normalized = np.linalg.inv(self.K).dot(points2_homogenous.transpose()).transpose()
+
+        points1_normalized = cv2.convertPointsFromHomogeneous(points1_normalized)[:, 0, :]
+        points2_normalized = cv2.convertPointsFromHomogeneous(points2_normalized)[:, 0, :]
+
+        F, mask = cv2.findFundamentalMat(points1_normalized, points2_normalized, method=cv2.FM_RANSAC,
+                                         ransacReprojThreshold=0.1, confidence=0.9)
         mask = mask.astype(bool).flatten()
 
         matched_pixels1 = matched_pixels1[mask]
@@ -146,7 +154,7 @@ class SFM:
 
             kps = np.array(view.keypoints)[view.indices > 0]
             img_pts = np.array([kp.pt for kp in kps])
-            img = cv2.imread(self.image_folder + '/' + view.file_name + '.jpg')
+            img = cv2.imread(self.image_folder + '/images/' + view.file_name + '.jpg')
 
             colors[view.indices[view.indices > 0]] = img[np.int32(img_pts[:, 1]),
                                                          np.int32(img_pts[:, 0])]
