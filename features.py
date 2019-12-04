@@ -137,7 +137,7 @@ def get_files_paths(folder_path):
 		return files_paths
 
 # returns two values: result to plot matches, list with coordinates of matches
-def match(descriptors_1, descriptors_2, keypoints_1, keypoints_2, matcher_alg='brute_force', distance_type=''):
+def match(descriptors_1, descriptors_2, matcher_alg='brute_force', distance_type=''):
 
 	# Brute Force Matching
 
@@ -207,16 +207,7 @@ def match(descriptors_1, descriptors_2, keypoints_1, keypoints_2, matcher_alg='b
 
 		#result = cv2.drawMatches(view1.image, view1.keypoints, view2.image, view2.keypoints, closest_matches, None, flags=2) # flags=2 hydes the features that are not matched
 
-	src_pts = np.float32([ keypoints_1[m.queryIdx].pt for m in closest_matches ])
-	dst_pts = np.float32([ keypoints_2[m.trainIdx].pt for m in closest_matches ])
-	M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC,5.0)
-	matches_mask = mask.ravel().tolist()
-
-	for idx, m in enumerate(closest_matches):
-		if mask[idx] != 0:
-			ransac_matches.append(closest_matches[idx])
-
-	return ransac_matches
+	return closest_matches
 
 # returns two values: result to plot matches, list with coordinates of matches
 def match_views(view1, view2, matcher_alg='brute_force', distance_type=''):
@@ -287,7 +278,7 @@ descriptors_2 = view2.descriptors
 keypoints_1 = view1.keypoints + view2.keypoints
 keypoints_2 = view2.keypoints
 
-matches = match(descriptors_1, descriptors_2, keypoints_1, keypoints_2, 'brute_force', distance_type)
+matches = match(descriptors_1, descriptors_2, 'brute_force', distance_type)
 
 #cv2.imshow("Image_{0}".format(detector), img)
 cv2.imshow("Matched result_{0}".format(feature_detection), display_result)
