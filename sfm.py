@@ -72,6 +72,7 @@ class SFM:
         view1.indices[indices1] = point_indices
         view2.indices[indices2] = point_indices
 
+        print('Triangulating points . . . . .')
         self.triangulate_points(view1, view2, matched_pixels1, matched_pixels2)
 
     def triangulate_points(self, view1, view2, matched_pixels1, matched_pixels2):
@@ -92,6 +93,7 @@ class SFM:
 
         self.points_3D = np.concatenate((self.points_3D, triangulated_points))
         self.num_points_3D = self.points_3D.shape[0]
+        print('Done - Added to point cloud . . . . .')
 
     def integrate_new_view(self, new_view):
 
@@ -114,6 +116,7 @@ class SFM:
                     point_2D = np.expand_dims(point_2D, axis=0)
                     new_points_2D = np.concatenate((new_points_2D, point_2D))
 
+        print('Calculating pose for new view . . . . .')
         _, R, t, _ = cv2.solvePnPRansac(new_points_3D, new_points_2D, self.K, distCoeffs=None, reprojectionError=8.,
                                         confidence=0.99, flags=cv2.SOLVEPNP_DLS)
         R, _ = cv2.Rodrigues(R)
@@ -132,6 +135,7 @@ class SFM:
         prev_view.indices[indices1] = point_indices
         new_view.indices[indices2] = point_indices
 
+        print('Triangulating new points . . . . .')
         self.triangulate_points(prev_view, new_view, matched_pixels1, matched_pixels2)
 
     def save_ply(self, filename):
@@ -176,19 +180,25 @@ class SFM:
         view0 = self.views[0]
         view1 = self.views[1]
 
+        print('\n\nSolving baseline pose for the first two views . . . . .')
         self.baseline_pose(view1=view0, view2=view1)
 
         self.done.append(view0)
         self.done.append(view1)
 
+        print('Saving point cloud to file . . . . .')
         self.save_ply('./results/0_1.ply')
+        print('Done - File available at ./results/0_1.ply . . . . .')
 
         for i in range(2, len(self.views)):
 
+            print('\n\nIntegrating new view . . . . .')
             self.integrate_new_view(self.views[i])
             ply_filename = './results/' + str(i-1) + '_' + str(i) + '.ply'
             self.done.append(self.views[i])
+            print('Saving point cloud to file . . . . .')
             self.save_ply(ply_filename)
+            print('Done - File available at ' + ply_filename + ' . . . . .')
 
 
 
