@@ -35,7 +35,6 @@ class View():
 
 	def write_features_file(self):
 
-		#i = 0
 		temp_array = []
 		for idx, point in enumerate(self.keypoints):
 			temp = (point.pt, point.size, point.angle, point.response, point.octave, point.class_id, self.descriptors[idx])
@@ -45,18 +44,6 @@ class View():
 		features_file = open('features/'+ self.file_name + '.pkl', 'wb')
 		pickle.dump(temp_array, features_file) 
 		features_file.close()
-
-		# open a file, where you ant to store the data
-		#kp_file = open('keypoints/'+ self.file_name + '.pkl', 'wb')
-		#desc_file = open('descriptors/'+ self.file_name + '.pkl', 'wb')
-
-		# dump information to that file
-		#pickle.dump(self.keypoints, kp_file)
-		#pickle.dump(self.descriptors, desc_file)
-
-		# close the file
-		#kp_file.close()
-		#desc_file.close()
 
 	def read_features_file(self):
 
@@ -113,10 +100,10 @@ class View():
 				sys.exit(0)
 
 			self.keypoints, self.descriptors = detector.detectAndCompute(self.image, None)
-			#keypoints_2, img_descriptors_2 = detector.detectAndCompute(self.image_2, None)
+
+			self.indices = np.full(len(self.keypoints), -1)
 
 			self.write_features_file()
-
 
 def get_files_paths(folder_path):
 
@@ -136,8 +123,7 @@ def get_files_paths(folder_path):
 	else:
 		return files_paths
 
-# returns two values: result to plot matches, list with coordinates of matches
-def match(descriptors_1, descriptors_2, matcher_alg='brute_force', distance_type=''):
+def match(descriptors_1, descriptors_2, feature_detection, matcher_alg='brute_force', distance_type=''):
 
 	# Brute Force Matching
 
@@ -151,6 +137,7 @@ def match(descriptors_1, descriptors_2, matcher_alg='brute_force', distance_type
 	closest_matches = []
 	ransac_matches = []
 	crossCheck = False if distance_type == 'ratio' else True
+	feature_detection = 'sift'
 
 	if feature_detection == 'sift' or feature_detection == 'surf':
 
@@ -180,20 +167,11 @@ def match(descriptors_1, descriptors_2, matcher_alg='brute_force', distance_type
 
 		matches = matcher.knnMatch(descriptors_1, descriptors_2, k=2)
 
-		# Need to draw only good matches, so create a mask
-		#matches_mask = [[0,0] for i in range(len(matches))]
-
 		# ratio test
-		#for i,(m,n) in enumerate(matches):
 		for m,n in matches:
 			if m.distance < 0.7*n.distance:
-				#matches_mask[i]=[1,0]
-				#closest_matches.append([m])
+
 				closest_matches.append(m)
-
-		#result = cv2.drawMatchesKnn(view1.image, view1.keypoints, view2.image, view2.keypoints, closest_matches, None, **draw_params)
-		#result = cv2.drawMatchesKnn(view1.image, view1.keypoints, view2.image, view2.keypoints, closest_matches, None, flags = 2)
-
 	else:
 
 		matches = matcher.match(descriptors_1, descriptors_2) # match() returns the best match
@@ -203,13 +181,9 @@ def match(descriptors_1, descriptors_2, matcher_alg='brute_force', distance_type
 		for m in matches:
 			if m.distance < 170: #0.5*matches[-1].distance: 
 				closest_matches.append(m)
-				#matched_points.append([view1.keypoints[m.queryIdx].pt, view2.keypoints[m.trainIdx].pt])
-
-		#result = cv2.drawMatches(view1.image, view1.keypoints, view2.image, view2.keypoints, closest_matches, None, flags=2) # flags=2 hydes the features that are not matched
 
 	return closest_matches
 
-# returns two values: result to plot matches, list with coordinates of matches
 def match_views(view1, view2, matcher_alg='brute_force', distance_type=''):
 
 	matches_paths = get_files_paths('matches/')
@@ -222,14 +196,12 @@ def match_views(view1, view2, matcher_alg='brute_force', distance_type=''):
 
 	else:
 
-		ransac_matches = match(view1.descriptors, view2.descriptors, view1.keypoints, view2.keypoints, matcher_alg, distance_type)
+		ransac_matches = match(view1.descriptors, view2.descriptors, view2.method, matcher_alg, distance_type)
 
 		view2.matches = ransac_matches
 
 		view2.write_matches_file(view1.file_name)
 
-	#draw_params = dict(matchColor = (0,255,0), singlePointColor = (255,0,0), matchesMask = matches_mask, flags = 2)
-	#result = cv2.drawMatches(view1.image, view1.keypoints, view2.image, view2.keypoints, closest_matches, None, **draw_params)
 	result = cv2.drawMatches(view1.image, view1.keypoints, view2.image, view2.keypoints, view2.matches, None, flags = 2)
 
 	return result
@@ -247,41 +219,3 @@ def crete_views(images_path, features_paths):
 
 	return views
 
-# construct the argument parse and parse the arguments
-ap = argparse.ArgumentParser()
-ap.add_argument("-i", "--images_path", required=True, help="path to input dataset of training images")
-ap.add_argument("-f", "--features_path", required=False, help="path to computed features")
-ap.add_argument("-d", "--feature_detection", default='sift', help="feature detection method. Admitted values: sift, surf, orb. Defect value: sift")
-
-args = vars(ap.parse_args())
-
-images_path = args["images_path"]
-features_path = args["features_path"]
-feature_detection = args["feature_detection"]
-
-distance_type = 'ratio'
-
-images_paths = get_files_paths(images_path)
-features_paths = get_files_paths(features_path)
-
-views = crete_views(images_paths, features_paths)
-
-view1 = views[0]
-view2 = views[1]
-view3 = views[2]
-
-display_result = match_views(view1, view2, 'brute_force', distance_type)
-
-descriptors_1 = np.concatenate((view1.descriptors, view2.descriptors), axis=0)
-descriptors_2 = view2.descriptors
-
-keypoints_1 = view1.keypoints + view2.keypoints
-keypoints_2 = view2.keypoints
-
-matches = match(descriptors_1, descriptors_2, 'brute_force', distance_type)
-
-#cv2.imshow("Image_{0}".format(detector), img)
-cv2.imshow("Matched result_{0}".format(feature_detection), display_result)
-cv2.waitKey(0)
-#cv2.imwrite('features.png', img)
-cv2.destroyAllWindows()
