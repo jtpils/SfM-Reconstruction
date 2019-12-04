@@ -36,19 +36,11 @@ class SFM:
 
         return indices1, indices2, matched_pixels1, matched_pixels2
 
-    def filter_matches(self, indices1, indices2, matched_pixels1, matched_pixels2):
+    @staticmethod
+    def filter_matches(indices1, indices2, matched_pixels1, matched_pixels2):
 
-        points1_homogenous = cv2.convertPointsToHomogeneous(matched_pixels1)[:, 0, :]
-        points2_homogenous = cv2.convertPointsToHomogeneous(matched_pixels2)[:, 0, :]
-
-        points1_normalized = np.linalg.inv(self.K).dot(points1_homogenous.transpose()).transpose()
-        points2_normalized = np.linalg.inv(self.K).dot(points2_homogenous.transpose()).transpose()
-
-        points1_normalized = cv2.convertPointsFromHomogeneous(points1_normalized)[:, 0, :]
-        points2_normalized = cv2.convertPointsFromHomogeneous(points2_normalized)[:, 0, :]
-
-        F, mask = cv2.findFundamentalMat(points1_normalized, points2_normalized, method=cv2.FM_RANSAC,
-                                         ransacReprojThreshold=0.1, confidence=0.9)
+        F, mask = cv2.findFundamentalMat(matched_pixels1, matched_pixels2, method=cv2.FM_RANSAC,
+                                         ransacReprojThreshold=0.9, confidence=0.9)
         mask = mask.astype(bool).flatten()
 
         matched_pixels1 = matched_pixels1[mask]
@@ -110,7 +102,7 @@ class SFM:
         new_points_2D = np.zeros((0, 2), dtype=np.float32)
 
         for view in self.done:
-            matches = match(view.descriptors, new_view.descriptors)
+            matches = match(view.descriptors, new_view.descriptors, view.method)
 
             for m in matches:
                 point_3d_idx = view.indices[m.queryIdx]
@@ -195,14 +187,16 @@ class SFM:
         self.done.append(view1)
 
         print('Saving point cloud to file . . . . .')
-        self.save_ply('./results/0_1.ply')
-        print('Done - File available at ./results/0_1.ply . . . . .')
+        if not os.path.exists(self.image_folder + '/results'):
+            os.makedirs(self.image_folder + '/results')
+        self.save_ply(self.image_folder + '/results/0_1.ply')
+        print('Done - File available at ' + self.image_folder + '/results/0_1.ply . . . . .')
 
         for i in range(2, len(self.views)):
 
             print('\n\nIntegrating new view . . . . .')
             self.integrate_new_view(self.views[i])
-            ply_filename = './results/' + str(i-1) + '_' + str(i) + '.ply'
+            ply_filename = self.image_folder + '/results/' + str(i-1) + '_' + str(i) + '.ply'
             self.done.append(self.views[i])
             print('Saving point cloud to file . . . . .')
             self.save_ply(ply_filename)
