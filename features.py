@@ -36,6 +36,9 @@ class View():
 
 	def write_features_file(self):
 
+		if not os.path.exists(self.root_path + '/features'):
+			os.makedirs(self.root_path + '/features')
+
 		temp_array = []
 		for idx, point in enumerate(self.keypoints):
 			temp = (point.pt, point.size, point.angle, point.response, point.octave, point.class_id, self.descriptors[idx])
@@ -60,6 +63,9 @@ class View():
 		return keypoints, np.array(descriptors)
 
 	def write_matches_file(self, previous_view_name):
+
+		if not os.path.exists(self.root_path + '/matches'):
+			os.makedirs(self.root_path + '/matches')
 
 		temp_array = []
 		for idx, match in enumerate(self.matches):
@@ -137,7 +143,6 @@ def match(descriptors_1, descriptors_2, feature_detection, matcher_alg='brute_fo
 	closest_matches = []
 	ransac_matches = []
 	crossCheck = False if distance_type == 'ratio' else True
-	feature_detection = 'sift'
 
 	if feature_detection == 'sift' or feature_detection == 'surf':
 
@@ -206,7 +211,7 @@ def match_views(view1, view2, matcher_alg='brute_force', distance_type=''):
 
 	return result
 
-def crete_views(root_path):
+def create_views(root_path):
 
 	images_paths = get_files_paths(root_path + '/images')
 	features_paths = get_files_paths(root_path + '/features')
