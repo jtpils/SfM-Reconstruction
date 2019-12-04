@@ -3,13 +3,7 @@ from features import *
 
 if __name__ == '__main__':
 
-    image_paths = get_files_paths('./benchmark')
-    image_features = get_files_paths('./features')
-
-    image_paths.sort()
-    image_features.sort()
-
-    views = crete_views(image_paths, image_features)
+    views = crete_views('./benchmark')
 
     for i in range(1, len(views)):
         _ = match_views(views[i - 1], views[i])

@@ -8,7 +8,7 @@ import pickle
 
 class View():
 
-	def __init__(self, image_path, feat_det_type= 'sift'):
+	def __init__(self, image_path, root_path, feat_det_type= 'sift'):
 		super(View, self).__init__()
 
 		count_parent_dir = len(os.path.dirname(image_path)) + 1
@@ -21,6 +21,7 @@ class View():
 		self.translation_vector = np.zeros((3, 1), dtype=np.float32)
 		self.matches = []
 		self.indices = []
+		self.root_path = root_path
 
 	def scale_image_height(self, img, new_height):
 
@@ -38,16 +39,15 @@ class View():
 		temp_array = []
 		for idx, point in enumerate(self.keypoints):
 			temp = (point.pt, point.size, point.angle, point.response, point.octave, point.class_id, self.descriptors[idx])
-			#++i
 			temp_array.append(temp)
 		
-		features_file = open('features/'+ self.file_name + '.pkl', 'wb')
+		features_file = open(self.root_path + '/features/'+ self.file_name + '.pkl', 'wb')
 		pickle.dump(temp_array, features_file) 
 		features_file.close()
 
 	def read_features_file(self):
 
-		features = pickle.load( open('features/'+ self.file_name + '.pkl', "rb" ) )
+		features = pickle.load( open(self.root_path + '/features/'+ self.file_name + '.pkl', "rb" ) )
 
 		keypoints = []
 		descriptors = []
@@ -66,7 +66,7 @@ class View():
 			temp = (match.distance, match.imgIdx, match.queryIdx, match.trainIdx)
 			temp_array.append(temp)
 		
-		matches_file = open('matches/'+ previous_view_name + '_' + self.file_name + '.pkl', 'wb')
+		matches_file = open(self.root_path + '/matches/'+ previous_view_name + '_' + self.file_name + '.pkl', 'wb')
 		pickle.dump(temp_array, matches_file) 
 		matches_file.close()
 
@@ -101,9 +101,9 @@ class View():
 
 			self.keypoints, self.descriptors = detector.detectAndCompute(self.image, None)
 
-			self.indices = np.full(len(self.keypoints), -1)
-
 			self.write_features_file()
+
+		self.indices = np.full(len(self.keypoints), -1)
 
 def get_files_paths(folder_path):
 
@@ -186,9 +186,9 @@ def match(descriptors_1, descriptors_2, feature_detection, matcher_alg='brute_fo
 
 def match_views(view1, view2, matcher_alg='brute_force', distance_type=''):
 
-	matches_paths = get_files_paths('matches/')
+	matches_paths = get_files_paths(view2.root_path + '/matches/')
 
-	filename = 'matches/'+ view1.file_name + '_' + view2.file_name + '.pkl'
+	filename = view2.root_path + '/matches/'+ view1.file_name + '_' + view2.file_name + '.pkl'
 
 	if matches_paths != None and os.path.isfile(filename):
 
@@ -206,13 +206,19 @@ def match_views(view1, view2, matcher_alg='brute_force', distance_type=''):
 
 	return result
 
-def crete_views(images_path, features_paths):
+def crete_views(root_path):
+
+	images_paths = get_files_paths(root_path + '/images')
+	features_paths = get_files_paths(root_path + '/features')
+
+	images_paths.sort()
+	if features_paths != None: features_paths.sort()
 
 	views = []
 
-	for i in range(len(images_path)):
+	for i in range(len(images_paths)):
 
-		view = View(images_path[i], 'sift')
+		view = View(images_paths[i], root_path, 'sift')
 		feat_path = None if features_paths == None else features_paths[i]
 		view.extract_features(feat_path)
 		views.append(view)
